@@ -5,44 +5,58 @@ from model import Transformer
 from dataset import ArithmeticDataset, ArithmeticIterator
 from tqdm import tqdm
 import wandb
+import argparse
 
-OPTIMIZATION_BUDGET = 3e5
-LOG = True
+parser = argparse.ArgumentParser(description="Replication of grokking behavior observed in Power et al.'s 'Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets")
+parser.add_argument("--optimization-budget", default=3e5, type=int, help="Number of training steps to run")
+parser.add_argument("--wandb-project", default="grok", type=str, help="Wandb project name")
+parser.add_argument("--no-logging", action="store_true", help="Disable logging to wandb")
+parser.add_argument("--num-layers", default=2, type=int, help="Number of layers in the transformer")
+parser.add_argument("--num-heads", default=4, type=int, help="Number of attention heads per layer")
+parser.add_argument("--d-model", default=128, type=int, help="Dimension of the model")
+parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate")
+parser.add_argument("--weight-decay", default=1e-5, type=float, help="Weight decay")
+parser.add_argument("--beta1", default=0.9, type=float, help="AdamW beta1")
+parser.add_argument("--beta2", default=0.98, type=float, help="AdamW beta2")
+
+args = parser.parse_args()
+
+OPTIMIZATION_BUDGET = args.optimization_budget
+LOG = not args.no_logging
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 print("Using device:", DEVICE)
 
 if LOG:
-    wandb.init(project="grok", settings=wandb.Settings(start_method="thread"))
+    wandb.init(project=args.wandb_project, settings=wandb.Settings(start_method="thread"))
 
 # get dataloaders
 train_dataset, val_dataset = ArithmeticDataset.splits(
         train_pct=50, # careful not to use .5
         operator="/",
         operand_length=None,
-        data_dir="data",
     )
 train_dataloader = ArithmeticIterator(
         train_dataset,
         DEVICE,
-        batchsize_hint=0,
+        batchsize_hint=0, # default (512)
     )
 val_dataloader = ArithmeticIterator(
     val_dataset,
     DEVICE,
-    batchsize_hint=-1,
+    batchsize_hint=-1, # just one batch
 )
 
 # get model: decoder-only transfrormer with causal attention masking; 2 layers, width 128, 4 attention heads
 model = Transformer(
-    n_layers=2,
-    n_heads=4,
-    d_model=128,
+    n_layers=args.num_layers,
+    n_heads=args.num_heads,
+    d_model=args.d_model,
 )
 model.to(DEVICE)
 model.train()
 
 # get optimizer
-optimizer = AdamW(model.parameters(), lr=1e-3, weight_decay=1e-5, betas=(0.9, 0.98))
+optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(args.beta1, args.beta2))
 
 # get criterion
 criterion = nn.CrossEntropyLoss()
