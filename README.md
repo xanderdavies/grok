@@ -4,7 +4,7 @@ Basic replication of grokking as observed in Power et al.'s ["Grokking: Generali
 
 ## Usage
 
-Calling `python runner.py` replicates the results in the figures. Use `python runner.py -h` to see arguments.
+Calling `python runner.py` replicates the results in the figures. Use `python runner.py -h` to see optional arguments.
 
 ## Results
 
