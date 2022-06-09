@@ -1,0 +1,5 @@
+.vscode/
+scratch.py
+__pycache__
+model.pt
+wandb
