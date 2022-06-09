@@ -89,11 +89,3 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
 
     # save model
     torch.save(model.state_dict(), "model.pt")
-
-
-
-
-
-
-
-
