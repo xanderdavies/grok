@@ -6,8 +6,7 @@ Basic replication of grokking as observed in Power et al.'s ["Grokking: Generali
 
 Accuracy | Loss
 :-------------------:|:-------------------------:
-![accuracy](https://user-images.githubusercontent.com/55059966/172949513-6eaea9a2-cb0c-4275-9124-9e71d141f9de.png) | ![loss](https://user-images.githubusercontent.com/55059966/172949504-89b5bb06-9f9f-4a94-82d8-03d0252f2758.png)
-
+![accuracy](https://user-images.githubusercontent.com/55059966/172950363-0cde68df-c192-4267-8ca6-ea58273c3c5f.png) | ![loss](https://user-images.githubusercontent.com/55059966/172950382-dd7590b1-f180-4d57-a24b-c93410259a30.png)
 
 ## Citation
 
