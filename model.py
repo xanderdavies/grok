@@ -14,9 +14,9 @@ class AttentionHead(nn.Module):
         self.d_key = d_key
 
         # head projections
-        self.Wq = nn.Linear(d_model, d_key, bias=False)
-        self.Wk = nn.Linear(d_model, d_key, bias=False)
-        self.Wv = nn.Linear(d_model, d_key, bias=False)
+        self.Wq = nn.Linear(d_model, d_key, bias=False, dtype=torch.float64)
+        self.Wk = nn.Linear(d_model, d_key, bias=False, dtype=torch.float64)
+        self.Wv = nn.Linear(d_model, d_key, bias=False, dtype=torch.float64)
 
         self.softmax = nn.Softmax(dim=-1)
 
