@@ -67,7 +67,7 @@ class MultiHeadAttention(nn.Module):
             for _ in range(heads)
         ]
         self.attn_heads = nn.ModuleList(attn_heads)
-        self.Wo = nn.Linear(d_model, d_model, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False, dtype=torch.float64)
 
     def forward(
         self,
@@ -119,7 +119,7 @@ class FFN(nn.Module):
             nn.Linear(d_model, d_ff, bias=False),
             non_linearities[non_linearity](),
             nn.Linear(d_ff, d_model, bias=False),
-        )
+        ).to(torch.float64)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.ffn(x)
@@ -136,11 +136,11 @@ class DecoderBlock(nn.Module):
         super().__init__()
 
         self.self_attn = MultiHeadAttention(d_model, heads)
-        self.self_attn_norm = nn.LayerNorm(d_model)
+        self.self_attn_norm = nn.LayerNorm(d_model, dtype=torch.float64)
 
         self.ffn = FFN(d_model, non_linearity=non_linearity)
         self.ffn_drop = nn.Dropout(p=dropout)
-        self.ffn_norm = nn.LayerNorm(d_model)
+        self.ffn_norm = nn.LayerNorm(d_model, dtype=torch.float64)
 
     def forward(
         self,
@@ -232,7 +232,7 @@ class Transformer(nn.Module):
             self.non_linearity,
         )
 
-        self.linear = nn.Linear(d_model, vocab_len, bias=False)
+        self.linear = nn.Linear(d_model, vocab_len, bias=False, dtype=torch.float64)
 
     @staticmethod
     def make_mask(context_len: int) -> Tensor:
