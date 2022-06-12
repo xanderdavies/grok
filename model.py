@@ -14,9 +14,9 @@ class AttentionHead(nn.Module):
         self.d_key = d_key
 
         # head projections
-        self.Wq = nn.Linear(d_model, d_key, bias=False, dtype=torch.float64)
-        self.Wk = nn.Linear(d_model, d_key, bias=False, dtype=torch.float64)
-        self.Wv = nn.Linear(d_model, d_key, bias=False, dtype=torch.float64)
+        self.Wq = nn.Linear(d_model, d_key, bias=True)
+        self.Wk = nn.Linear(d_model, d_key, bias=True)
+        self.Wv = nn.Linear(d_model, d_key, bias=True)
 
         self.softmax = nn.Softmax(dim=-1)
 
@@ -67,7 +67,7 @@ class MultiHeadAttention(nn.Module):
             for _ in range(heads)
         ]
         self.attn_heads = nn.ModuleList(attn_heads)
-        self.Wo = nn.Linear(d_model, d_model, bias=False, dtype=torch.float64)
+        self.Wo = nn.Linear(d_model, d_model, bias=True)
 
     def forward(
         self,
@@ -116,9 +116,9 @@ class FFN(nn.Module):
         non_linearities = {"relu": nn.ReLU, "gelu": nn.GELU}
 
         self.ffn = nn.Sequential(
-            nn.Linear(d_model, d_ff, bias=False),
+            nn.Linear(d_model, d_ff, bias=True),
             non_linearities[non_linearity](),
-            nn.Linear(d_ff, d_model, bias=False),
+            nn.Linear(d_ff, d_model, bias=True),
         ).to(torch.float64)
 
     def forward(self, x: Tensor) -> Tensor:
@@ -136,11 +136,11 @@ class DecoderBlock(nn.Module):
         super().__init__()
 
         self.self_attn = MultiHeadAttention(d_model, heads)
-        self.self_attn_norm = nn.LayerNorm(d_model, dtype=torch.float64)
+        self.self_attn_norm = nn.LayerNorm(d_model)
 
         self.ffn = FFN(d_model, non_linearity=non_linearity)
         self.ffn_drop = nn.Dropout(p=dropout)
-        self.ffn_norm = nn.LayerNorm(d_model, dtype=torch.float64)
+        self.ffn_norm = nn.LayerNorm(d_model)
 
     def forward(
         self,
@@ -232,7 +232,7 @@ class Transformer(nn.Module):
             self.non_linearity,
         )
 
-        self.linear = nn.Linear(d_model, vocab_len, bias=False, dtype=torch.float64)
+        self.linear = nn.Linear(d_model, vocab_len, bias=True)
 
     @staticmethod
     def make_mask(context_len: int) -> Tensor:
@@ -279,6 +279,7 @@ class Transformer(nn.Module):
 
         # Decode
         x = self.embed(x)
+        
         decoded, attentions, values = self.decoder(
             x, self_attn_mask, save_activations=save_activations
         )
@@ -288,4 +289,4 @@ class Transformer(nn.Module):
             decoded = decoded[:, pos, :]
 
         y_hat = self.linear(decoded)
-        return y_hat, attentions, values
+        return y_hat
