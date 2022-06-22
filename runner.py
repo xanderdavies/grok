@@ -10,7 +10,7 @@ from datetime import datetime
 
 parser = argparse.ArgumentParser(description="Replication of grokking behavior observed in Power et al.'s 'Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets")
 parser.add_argument("--optimization-budget", default=3e5, type=int, help="Number of training steps to run")
-parser.add_argument("--wandb-project", default="grok", type=str, help="Wandb project name")
+parser.add_argument("--wandb-project", default="grokking", type=str, help="Wandb project name")
 parser.add_argument("--no-logging", action="store_true", help="Disable logging to wandb")
 parser.add_argument("--num-layers", default=2, type=int, help="Number of layers in the transformer")
 parser.add_argument("--num-heads", default=4, type=int, help="Number of attention heads per layer")
