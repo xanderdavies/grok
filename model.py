@@ -33,6 +33,11 @@ class DecoderOnlyTransformer(nn.Module):
         self.embedding = nn.Embedding(vocab_len, d_model)
         self.position_encoding = self._position_encoding(max_context_len, d_model).to(device)
         self.src_mask = self.generate_square_subsequent_mask(max_context_len).to(device)
+
+        self.decoding = nn.Linear(d_model, vocab_len)
+
+        self.num_params = sum([p.numel() for p in self.model.parameters() if p.requires_grad])
+        self.num_params += sum([p.numel() for p in self.embedding.parameters() if p.requires_grad])
           
     def embed(self, indices: Tensor) -> Tensor:
         context_len = indices.shape[-1]
@@ -63,4 +68,4 @@ class DecoderOnlyTransformer(nn.Module):
         embedded = self.embed(indices).float()
         mask = self.src_mask[:indices.shape[-1], :indices.shape[-1]].float()
         # model forward takes src, tgt, src_mask, tgt_mask
-        return self.model(torch.zeros_like(embedded), embedded, mask, mask)
+        return self.decoding(self.model(torch.zeros_like(embedded), embedded, mask, mask))
