@@ -20,11 +20,12 @@ parser.add_argument("--weight-decay", default=1e-5, type=float, help="Weight dec
 parser.add_argument("--beta1", default=0.9, type=float, help="AdamW beta1")
 parser.add_argument("--beta2", default=0.98, type=float, help="AdamW beta2")
 parser.add_argument("--vocab-len", default=2000, type=int, help="Transformer vocab length")
+parser.add_argument("--device", default=None, type=str, help="Device used for training.")
 args = parser.parse_args()
 
 OPTIMIZATION_BUDGET = args.optimization_budget
 LOG = not args.no_logging
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+DEVICE = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Using device:", DEVICE)
 
 if LOG:
@@ -57,6 +58,9 @@ model = DecoderOnlyTransformer(
     vocab_len=args.vocab_len,
     device=DEVICE,
 ).float().to(DEVICE)
+if LOG:
+    wandb.log({"Number of Parameters": model.num_params})
+print(f"Model has {model.num_params} trainable parameters.")
 
 # get optimizer
 optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(args.beta1, args.beta2))
