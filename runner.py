@@ -96,11 +96,14 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
             loss += criterion(y_hat[:, -2, :], y[:, -2]).item()
             accuracy += (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
         if LOG:
-            wandb.log({
+            log_dict = {
                 "Loss/val": loss / len(val_dataloader),
                 "epoch": epoch,
                 "Accuracy/val": accuracy / len(val_dataloader),
-            })
+            }
+            if accuracy / len(val_dataloader) > 0.98:
+                log_dict.update({"Time to >98% Validation Accuracy": epoch})
+            wandb.log(log_dict)
         else:
             print(f"Epoch {epoch}: test loss {loss / len(val_dataloader)}, test accuracy {accuracy / len(val_dataloader)}")
 
