@@ -14,7 +14,7 @@ parser.add_argument("--optimization-budget", default=3e5, type=int, help="Number
 parser.add_argument("--wandb-project", default="grokking", type=str, help="Wandb project name")
 parser.add_argument("--no-logging", action="store_true", help="Disable logging to wandb")
 parser.add_argument("--num-layers", default=2, type=int, help="Number of layers in the transformer")
-parser.add_argument("--num-heads", default=4, type=int, help="Number of attention heads per layer")
+parser.add_argument("--num-heads", default=1, type=int, help="Number of attention heads per layer")
 parser.add_argument("--d-model", default=128, type=int, help="Dimension of the model")
 parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate")
 parser.add_argument("--weight-decay", default=1e-5, type=float, help="Weight decay")
