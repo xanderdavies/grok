@@ -3,3 +3,6 @@ scratch.py
 __pycache__
 model.pt
 wandb
+slurm-*
+machine.file.*
+*.sh
