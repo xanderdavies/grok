@@ -1,15 +1,16 @@
+import wandb
+import argparse
+from tqdm import tqdm
+from datetime import datetime
+
 import torch
-from torch.optim import AdamW
 import torch.nn as nn
 import torch.nn.functional as F
 
 from dataset import ArithmeticDataset, ArithmeticIterator
-from tqdm import tqdm
-import wandb
-import argparse
-
+from adamw import AdamW
 from open_ai_transformer import Transformer
-from datetime import datetime
+
 
 parser = argparse.ArgumentParser(description="Replication of grokking behavior observed in Power et al.'s 'Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets")
 parser.add_argument("--optimization-budget", default=3e5, type=int, help="Number of training steps to run")
@@ -58,8 +59,8 @@ model = Transformer(
     n_layers=args.num_layers,
     n_heads=args.num_heads,
     d_model=args.d_model,
+    non_linearity="relu",
     vocab_len=args.vocab_len,
-    # device=DEVICE,
 ).float().to(DEVICE)
 num_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
 if LOG:
@@ -67,7 +68,12 @@ if LOG:
 print(f"Model has {num_params} trainable parameters.")
 
 # get optimizer
-optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(args.beta1, args.beta2))
+optimizer = AdamW(
+    model.parameters(), 
+    lr=args.lr, 
+    weight_decay=args.weight_decay, 
+    betas=(args.beta1, args.beta2)
+)
 
 # get criterion
 criterion = nn.CrossEntropyLoss()
@@ -77,6 +83,7 @@ steps_per_epoch = len(train_dataloader)
 for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
     # train
     model.train()
+
     for i, batch in enumerate(train_dataloader):
         optimizer.zero_grad()
         X, y = batch['text'], batch['target']
