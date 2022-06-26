@@ -113,7 +113,7 @@ class FFN(nn.Module):
 
         d_ff = int(multiplier * d_model)
 
-        non_linearities = {"relu": nn.ReLU, "gelu": nn.GELU}
+        non_linearities = {"relu": nn.ReLU, "gelu": nn.GELU, "leaky": nn.LeakyReLU}
 
         self.ffn = nn.Sequential(
             nn.Linear(d_model, d_ff, bias=False),
