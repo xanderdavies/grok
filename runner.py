@@ -5,7 +5,8 @@ from dataset import ArithmeticDataset, ArithmeticIterator
 from tqdm import tqdm
 import wandb
 import argparse
-from model import DecoderOnlyTransformer
+# from model import DecoderOnlyTransformer
+from open_ai_transformer import Transformer
 from datetime import datetime
 
 parser = argparse.ArgumentParser(description="Replication of grokking behavior observed in Power et al.'s 'Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets")
@@ -13,7 +14,7 @@ parser.add_argument("--optimization-budget", default=3e5, type=int, help="Number
 parser.add_argument("--wandb-project", default="grokking", type=str, help="Wandb project name")
 parser.add_argument("--no-logging", action="store_true", help="Disable logging to wandb")
 parser.add_argument("--num-layers", default=2, type=int, help="Number of layers in the transformer")
-parser.add_argument("--num-heads", default=1, type=int, help="Number of attention heads per layer")
+parser.add_argument("--num-heads", default=4, type=int, help="Number of attention heads per layer")
 parser.add_argument("--d-model", default=128, type=int, help="Dimension of the model")
 parser.add_argument("--lr", default=1e-3, type=float, help="Learning rate")
 parser.add_argument("--weight-decay", default=1e-5, type=float, help="Weight decay")
@@ -51,16 +52,17 @@ val_dataloader = ArithmeticIterator(
 )
 
 # get model: decoder-only transfrormer with causal attention masking; 2 layers, width 128, 4 attention heads
-model = DecoderOnlyTransformer(
+model = Transformer(
     n_layers=args.num_layers,
     n_heads=args.num_heads,
     d_model=args.d_model,
     vocab_len=args.vocab_len,
-    device=DEVICE,
+    # device=DEVICE,
 ).float().to(DEVICE)
+num_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
 if LOG:
-    wandb.log({"Number of Parameters": model.num_params})
-print(f"Model has {model.num_params} trainable parameters.")
+    wandb.log({"Number of Parameters": num_params})
+print(f"Model has {num_params} trainable parameters.")
 
 # get optimizer
 optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(args.beta1, args.beta2))
@@ -77,7 +79,7 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
         optimizer.zero_grad()
         X, y = batch['text'], batch['target']
         X, y = X.to(DEVICE), y.to(DEVICE)
-        y_hat = model(X)
+        y_hat, _, _ = model(X)
         loss = criterion(y_hat[:, -2, :], y[:, -2])
         loss.backward()
         optimizer.step()
@@ -96,7 +98,7 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
         for batch in val_dataloader: # only one batch
             X, y = batch['text'], batch['target']
             X, y = X.to(DEVICE), y.to(DEVICE)
-            y_hat = model(X)
+            y_hat, _, _ = model(X)
             loss += criterion(y_hat[:, -2, :], y[:, -2]).item()
             accuracy += (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
         if LOG:
