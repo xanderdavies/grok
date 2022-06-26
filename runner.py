@@ -1,11 +1,13 @@
 import torch
 from torch.optim import AdamW
 import torch.nn as nn
+import torch.nn.functional as F
+
 from dataset import ArithmeticDataset, ArithmeticIterator
 from tqdm import tqdm
 import wandb
 import argparse
-# from model import DecoderOnlyTransformer
+
 from open_ai_transformer import Transformer
 from datetime import datetime
 
@@ -83,14 +85,31 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
         loss = criterion(y_hat[:, -2, :], y[:, -2])
         loss.backward()
         optimizer.step()
-        if LOG:
-            wandb.log({
-                "Loss/train": loss.item(), 
-                "epoch": epoch,
-                "Accuracy/train": (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item(),
-            })
-        else:
-            print(f"Epoch {epoch}: train loss {loss.item()}, train accuracy {(y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()}")
+        with torch.no_grad():
+            if LOG:
+                soft_out =  F.softmax(y_hat[:, -2, :], dim=1).max(dim=1)[0].cpu().numpy()
+                log_dict = {
+                    "Loss/train": loss.item(), 
+                    "epoch": epoch,
+                    "Accuracy/train": (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item(),
+                    "train max(softmax(out))": soft_out,
+                    "average train max(softmax(out))": soft_out.mean().item(),
+                    "min train max(softmax(out))": soft_out.min().item(),
+                }
+                if i == 0:
+                    cum_l2_norm, cum_l1_norm, cum_inf_norm = 0, 0, 0
+                    for p in [param for param in model.parameters() if param.requires_grad]:
+                        cum_l2_norm += torch.linalg.norm(p)
+                        cum_l1_norm += torch.linalg.norm(p, ord=1)
+                        cum_inf_norm += torch.linalg.norm(p, ord=torch.inf)
+                    log_dict.update({
+                        "train cumulative l2 norm": cum_l2_norm.cpu().item(),
+                        "train cumulative l1 norm": cum_l1_norm.cpu().item(),
+                        "train cumulative linf norm": cum_inf_norm.cpu().item(),
+                    })
+                wandb.log(log_dict)
+            else:
+                print(f"Epoch {epoch}: train loss {loss.item()}, train accuracy {(y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()}")
     # eval
     model.eval()
     with torch.no_grad():
