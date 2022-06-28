@@ -6,6 +6,7 @@ from datetime import datetime
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim import SGD
 
 from dataset import ArithmeticDataset, ArithmeticIterator
 from adamw import AdamW
@@ -25,6 +26,10 @@ parser.add_argument("--beta1", default=0.9, type=float, help="AdamW beta1")
 parser.add_argument("--beta2", default=0.98, type=float, help="AdamW beta2")
 parser.add_argument("--vocab-len", default=2000, type=int, help="Transformer vocab length")
 parser.add_argument("--device", default=None, type=str, help="Device used for training.")
+parser.add_argument("--label-smoothing", default=0, type=float, help="Label smoothing passed to CrossEntropyLoss.")
+parser.add_argument("--only-step-when-imperfect", default=False, action="store_true", help="Only take optimizer steps when the train accuracy is imperfect.")
+parser.add_argument("--use-sgd", default=False, action="store_true")
+parser.add_argument("--full-batch", default=False, action="store_true")
 args = parser.parse_args()
 
 OPTIMIZATION_BUDGET = args.optimization_budget
@@ -33,9 +38,17 @@ DEVICE = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Using device:", DEVICE)
 
 if LOG:
-    tags = [f"d_model={args.d_model}", f"num_layers={args.num_layers}", f"num_heads={args.num_heads}"]
+    tags = [f"d_model={args.d_model}", f"num_layers={args.num_layers}", f"num_heads={args.num_heads}", f"smooth={args.label_smoothing}"]
     name = f"dim_{args.d_model}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    wandb.init(project=args.wandb_project, settings=wandb.Settings(start_method="thread"), tags=tags, name=name)
+    if args.label_smoothing != 0:
+        name = f"smooth_{args.label_smoothing}-" + name
+    if args.only_step_when_imperfect:
+        name = "only_imperfect-" + name
+    if args.use_sgd:
+        name = "sgd-" + name
+    if args.full_batch:
+        name = "full_batch-" + name
+    wandb.init(project=args.wandb_project, settings=wandb.Settings(start_method="thread"), tags=tags, name=name, config=args)
 
 # get dataloaders
 train_dataset, val_dataset = ArithmeticDataset.splits(
@@ -46,7 +59,7 @@ train_dataset, val_dataset = ArithmeticDataset.splits(
 train_dataloader = ArithmeticIterator(
         train_dataset,
         DEVICE,
-        batchsize_hint=0, # default (512)
+        batchsize_hint= (0 if not args.full_batch else -1), # default (512)
     )
 val_dataloader = ArithmeticIterator(
     val_dataset,
@@ -65,21 +78,31 @@ model = Transformer(
 num_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
 if LOG:
     wandb.log({"Number of Parameters": num_params})
+    wandb.watch(model)
 print(f"Model has {num_params} trainable parameters.")
 
 # get optimizer
-optimizer = AdamW(
-    model.parameters(), 
-    lr=args.lr, 
-    weight_decay=args.weight_decay, 
-    betas=(args.beta1, args.beta2)
-)
+if not args.use_sgd:
+    optimizer = AdamW(
+        model.parameters(), 
+        lr=args.lr, 
+        weight_decay=args.weight_decay, 
+        betas=(args.beta1, args.beta2)
+    )
+else:
+    optimizer = SGD(
+        model.parameters(),
+        lr = args.lr,
+        weight_decay=args.weight_decay,
+        momentum=args.beta1,
+    )
 
 # get criterion
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
 # train model
 steps_per_epoch = len(train_dataloader)
+step_perf_train_acc, steps_to_98_val, steps_to_100_val = -1, -1, -1
 for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
     # train
     model.train()
@@ -90,15 +113,21 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
         X, y = X.to(DEVICE), y.to(DEVICE)
         y_hat, _, _ = model(X)
         loss = criterion(y_hat[:, -2, :], y[:, -2])
-        loss.backward()
-        optimizer.step()
+        train_acc = (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
+        if train_acc == 1 and step_perf_train_acc == -1:
+            step_perf_train_acc = epoch*len(train_dataloader) + i
+        if train_acc != 1 or not args.only_step_when_imperfect:
+            loss.backward()
+            optimizer.step()
+        else:
+            print("not stepping!")
         with torch.no_grad():
             if LOG:
                 soft_out =  F.softmax(y_hat[:, -2, :], dim=1).max(dim=1)[0].cpu().numpy()
                 log_dict = {
                     "Loss/train": loss.item(), 
                     "epoch": epoch,
-                    "Accuracy/train": (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item(),
+                    "Accuracy/train": train_acc,
                     "train max(softmax(out))": soft_out,
                     "average train max(softmax(out))": soft_out.mean().item(),
                     "min train max(softmax(out))": soft_out.min().item(),
@@ -133,8 +162,17 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
                 "epoch": epoch,
                 "Accuracy/val": accuracy / len(val_dataloader),
             }
-            if accuracy / len(val_dataloader) > 0.98:
-                log_dict.update({"Time to >98% Validation Accuracy": epoch})
+            if accuracy / len(val_dataloader) > 0.98 and steps_to_98_val == -1:
+                steps_to_98_val = epoch * len(train_dataloader)
+                log_dict.update({
+                    "Time to >98% Validation Accuracy": epoch,
+                    "steps_{98%\_val} - steps_{\_train}": steps_to_98_val - step_perf_train_acc,
+                })
+            if accuracy/len(val_dataloader) == 1 and steps_to_100_val == -1:
+                steps_to_100_val = epoch * len(train_dataloader)
+                log_dict.update({
+                    "perf_{98%\_val} - steps_{\_train}":  steps_to_100_val - step_perf_train_acc,
+                })
             wandb.log(log_dict)
         else:
             print(f"Epoch {epoch}: test loss {loss / len(val_dataloader)}, test accuracy {accuracy / len(val_dataloader)}")
