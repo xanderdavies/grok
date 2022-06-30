@@ -14,7 +14,7 @@ from open_ai_transformer import Transformer
 
 
 parser = argparse.ArgumentParser(description="Replication of grokking behavior observed in Power et al.'s 'Grokking: Generalization Beyond Overfitting on Small Algorithmic Datasets")
-parser.add_argument("--optimization-budget", default=3e5, type=int, help="Number of training steps to run")
+parser.add_argument("--optimization-budget", default=3e10, type=int, help="Number of training steps to run")
 parser.add_argument("--wandb-project", default="grokking", type=str, help="Wandb project name")
 parser.add_argument("--no-logging", action="store_true", help="Disable logging to wandb")
 parser.add_argument("--num-layers", default=2, type=int, help="Number of layers in the transformer")
@@ -30,6 +30,7 @@ parser.add_argument("--label-smoothing", default=0, type=float, help="Label smoo
 parser.add_argument("--only-step-when-imperfect", default=False, action="store_true", help="Only take optimizer steps when the train accuracy is imperfect.")
 parser.add_argument("--use-sgd", default=False, action="store_true")
 parser.add_argument("--full-batch", default=False, action="store_true")
+parser.add_argument("--momentum", type=float, default=0)
 args = parser.parse_args()
 
 OPTIMIZATION_BUDGET = args.optimization_budget
@@ -42,12 +43,16 @@ if LOG:
     name = f"dim_{args.d_model}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     if args.label_smoothing != 0:
         name = f"smooth_{args.label_smoothing}-" + name
+        tags = [f"smooth_{args.label_smoothing}"] + tags
     if args.only_step_when_imperfect:
         name = "only_imperfect-" + name
+        tags = ["only_imperfect"] + tags
     if args.use_sgd:
-        name = "sgd-" + name
+        name = f"sgd_lr_{args.lr}_mom_{args.momentum}-" + name
+        tags = [f"sgd_lr_{args.lr}_mom_{args.momentum}"] + tags
     if args.full_batch:
         name = "full_batch-" + name
+        tags = ["full_batch"] + tags
     wandb.init(project=args.wandb_project, settings=wandb.Settings(start_method="thread"), tags=tags, name=name, config=args)
 
 # get dataloaders
@@ -75,6 +80,7 @@ model = Transformer(
     non_linearity="relu",
     vocab_len=args.vocab_len,
 ).float().to(DEVICE)
+*_, last_weights = model.parameters()
 num_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
 if LOG:
     wandb.log({"Number of Parameters": num_params})
@@ -94,7 +100,7 @@ else:
         model.parameters(),
         lr = args.lr,
         weight_decay=args.weight_decay,
-        momentum=args.beta1,
+        momentum=args.momentum,
     )
 
 # get criterion
@@ -131,6 +137,7 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
                     "train max(softmax(out))": soft_out,
                     "average train max(softmax(out))": soft_out.mean().item(),
                     "min train max(softmax(out))": soft_out.min().item(),
+                    "norm of last weights": torch.linalg.norm(last_weights).item(),
                 }
                 if i == 0:
                     cum_l2_norm, cum_l1_norm, cum_inf_norm = 0, 0, 0
