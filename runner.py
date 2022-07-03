@@ -40,7 +40,7 @@ print("Using device:", DEVICE)
 
 if LOG:
     tags = [f"d_model={args.d_model}", f"num_layers={args.num_layers}", f"num_heads={args.num_heads}", f"smooth={args.label_smoothing}"]
-    name = f"dim_{args.d_model}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    name = f"decay_{args.weight_decay}-dim_{args.d_model}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     if args.label_smoothing != 0:
         name = f"smooth_{args.label_smoothing}-" + name
         tags = [f"smooth_{args.label_smoothing}"] + tags
@@ -80,7 +80,6 @@ model = Transformer(
     non_linearity="relu",
     vocab_len=args.vocab_len,
 ).float().to(DEVICE)
-*_, last_weights = model.parameters()
 num_params = sum([p.numel() for p in model.parameters() if p.requires_grad])
 if LOG:
     wandb.log({"Number of Parameters": num_params})
@@ -129,6 +128,10 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
             print("not stepping!")
         with torch.no_grad():
             if LOG:
+                # TODO: make sure this is reasonable way of logging last weights.
+                for param in model.parameters():
+                    if param.requires_grad:
+                        last_weights = param
                 soft_out =  F.softmax(y_hat[:, -2, :], dim=1).max(dim=1)[0].cpu().numpy()
                 log_dict = {
                     "Loss/train": loss.item(), 
@@ -185,4 +188,4 @@ for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
             print(f"Epoch {epoch}: test loss {loss / len(val_dataloader)}, test accuracy {accuracy / len(val_dataloader)}")
 
     # save model
-    torch.save(model.state_dict(), "model.pt")
+    torch.save(model.state_dict(), f"{name}-LATEST-model.pt")
