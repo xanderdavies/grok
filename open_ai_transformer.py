@@ -43,7 +43,7 @@ class AttentionHead(nn.Module):
             attn.masked_fill_(mask == 0, float("-inf"))
 
         # softmax
-        attn = self.softmax(attn)
+        attn = self.softmax(attn) 
 
         # sum the weighted value vectors
         result: Tensor = torch.matmul(attn, values)  # shape = (max_context_len, d_key)
@@ -136,11 +136,11 @@ class DecoderBlock(nn.Module):
         super().__init__()
 
         self.self_attn = MultiHeadAttention(d_model, heads)
-        self.self_attn_norm = nn.LayerNorm(d_model, dtype=torch.float64)
+        self.self_attn_norm = nn.LayerNorm(d_model, dtype=torch.float64) # TODO: can I remove this?
 
         self.ffn = FFN(d_model, non_linearity=non_linearity)
         self.ffn_drop = nn.Dropout(p=dropout)
-        self.ffn_norm = nn.LayerNorm(d_model, dtype=torch.float64)
+        self.ffn_norm = nn.LayerNorm(d_model, dtype=torch.float64) # TODO: can I remove this?
 
     def forward(
         self,
@@ -263,6 +263,7 @@ class Transformer(nn.Module):
         x: Tensor,
         pos: int = None,
         save_activations: bool = False,
+        embedding_noise: float = 0.0,
     ) -> Tuple[Tensor, Union[Tensor, None], Union[Tensor, None]]:
         """parameters:
         x:  (rank-1 tensor) vocab indices of decoder input token
@@ -279,6 +280,9 @@ class Transformer(nn.Module):
 
         # Decode
         x = self.embed(x)
+        if embedding_noise > 0.0:
+            x = x + torch.randn_like(x) * embedding_noise
+
         decoded, attentions, values = self.decoder(
             x, self_attn_mask, save_activations=save_activations
         )
@@ -288,4 +292,4 @@ class Transformer(nn.Module):
             decoded = decoded[:, pos, :]
 
         y_hat = self.linear(decoded)
-        return y_hat, attentions, values
+        return y_hat

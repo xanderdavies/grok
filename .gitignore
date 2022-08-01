@@ -6,3 +6,6 @@ wandb
 slurm-*
 machine.file.*
 *.sh
+*.pt
+weights
+*.png

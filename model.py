@@ -64,8 +64,10 @@ class DecoderOnlyTransformer(nn.Module):
         """Generates an upper-triangular matrix of -inf, with zeros on diag."""
         return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
 
-    def forward(self, indices: Tensor) -> Tensor:
+    def forward(self, indices: Tensor, embedding_noise=False) -> Tensor:
         embedded = self.embed(indices).float()
+        if embedding_noise:
+            embedded = embedded + torch.randn_like(embedded) * 0.1
         mask = self.src_mask[:indices.shape[-1], :indices.shape[-1]].float()
         # model forward takes src, tgt, src_mask, tgt_mask
         return self.decoding(self.model(torch.zeros_like(embedded), embedded, mask, mask))
