@@ -9,3 +9,4 @@ machine.file.*
 *.pt
 weights
 *.png
+data

@@ -311,8 +311,9 @@ class ArithmeticIterator(torch.utils.data.IterableDataset):
             raise StopIteration
         indices = self.permutation[batch_begin : batch_begin + self.batchsize]
         text = self.dataset.data[indices, :-1]
+        # lower_dim_embedding = self.low_dim_embedding(text)
         target = self.dataset.data[indices, 1:]
-        batch = {"text": text.to(self.device), "target": target.to(self.device)}
+        batch = {"text": text.to(self.device), "target": target.to(self.device)} #, "lower_dim_embedding": lower_dim_embedding.to(self.device)}
         self.index += 1
         return batch
 

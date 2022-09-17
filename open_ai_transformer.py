@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from numpy import cos, sin, sqrt
 from torch import tensor, Tensor
-
+from sklearn.decomposition import PCA
 
 class AttentionHead(nn.Module):
     def __init__(self, d_model: int, d_key: int) -> None:
@@ -215,10 +215,11 @@ class Transformer(nn.Module):
         self.dropout = dropout
         self.max_context_len = max_context_len
         self.non_linearity = non_linearity
+        self.embedding_on = True
 
         self.vocab_len = vocab_len
 
-        self.embedding = nn.Embedding(vocab_len, d_model)
+        self.embedding = nn.Embedding(vocab_len, d_model) 
         self.register_buffer(
             "position_encoding", self._position_encoding(max_context_len, d_model)
         )
@@ -233,6 +234,25 @@ class Transformer(nn.Module):
         )
 
         self.linear = nn.Linear(d_model, vocab_len, bias=False, dtype=torch.float64)
+
+    def use_embed(self, use_embed: bool) -> None:
+        self.embedding_on = use_embed
+
+    def get_low_d_transform(self, dataset, n_features):
+        # dataset is n x d
+        # use PCA to reduce dimensionality to n_features
+        import numpy as np
+        embedded_dataset = self.embed(dataset).cpu().numpy()
+        embedded_dataset = np.reshape(embedded_dataset, (len(dataset), -1))
+        pca = PCA(n_components=n_features)
+        pca.fit(embedded_dataset)
+        def transform(x):
+            embed_x = self.embed(x.cuda()).cpu().numpy()
+            shape_embed = embed_x.shape
+            embed_x = np.reshape(embed_x, (len(x), -1))
+            return torch.from_numpy(pca.inverse_transform(pca.transform(embed_x)).reshape(shape_embed))
+        return transform
+
 
     @staticmethod
     def make_mask(context_len: int) -> Tensor:
@@ -273,13 +293,18 @@ class Transformer(nn.Module):
         x = x.to(self.embedding.weight.device)
 
         # make_attention mask
-        this_max_context_len = x.shape[-1]
-        self_attn_mask = self.self_attn_mask[  # type: ignore
-            :this_max_context_len, :this_max_context_len
-        ]
+        if self.embedding_on:
+            this_max_context_len = x.shape[-1]
+            self_attn_mask = self.self_attn_mask[  # type: ignore
+                :this_max_context_len, :this_max_context_len
+            ]
+            x = self.embed(x)
+        else:
+            this_max_context_len = x.shape[-2]
+            self_attn_mask = self.self_attn_mask[  # type: ignore
+                :this_max_context_len, :this_max_context_len
+            ]
 
-        # Decode
-        x = self.embed(x)
         if embedding_noise > 0.0:
             x = x + torch.randn_like(x) * embedding_noise
 
