@@ -62,7 +62,6 @@ parser.add_argument("--resume-run-id", default=None, type=str, help="WandB run t
 parser.add_argument("--load-path", default=None, type=str, help="Load this model.")
 parser.add_argument("--log-hessian-metrics", default=False, action="store_true")
 parser.add_argument("--num-jobs", default=1, type=int, help="Number of jobs to run on this gpu (default 1).")
-parser.add_argument("--model-sweep-mode", default=0, type=int, help="Use 1 if in model sweep mode, which handles multithreading.")
 
 arguments = parser.parse_args()
 OPTIMIZATION_BUDGET = arguments.optimization_budget
