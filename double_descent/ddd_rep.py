@@ -20,28 +20,28 @@ import argparse
 Hyperparameters
 """
 
-parser = argparse.ArgumentParser(description="Double Descent")
-parser.add_argument("--dset-size", type=float, required=True)
-arguments = parser.parse_args() 
+# parser = argparse.ArgumentParser(description="Double Descent")
+# parser.add_argument("--dset-size", type=float, required=True)
+# arguments = parser.parse_args() 
 
-PERC_TRAIN = arguments.dset_size
-# PERC_TRAIN = [0.1, 0.25, 0.5, 1] #0.001, 0.005, 0.01, 0.05] # 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
+# PERC_TRAIN = arguments.dset_size
+PERC_TRAIN = [0.001, 0.005, 0.01, 0.05] # 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
 
 WIDTH_PARAM = 12 # [3, 12, 64] are in DDD
-LR = 0.01 # 0.0001 per DDD, but fails?
+LR =  0.0001 # 0.01 # per DDD, but fails?
 LABEL_NOISE = .15 # per DDD
 EPOCHS = 4000 # per DDD
 BATCH_SIZE = 128 # per DDD
 
 WEIGHT_DECAY = 0 # per DDD, could try 1e-5
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'; print("using:", DEVICE)
+OPT = "Adam" # per DDD
 
 RANDOM_SEED = True
 if not RANDOM_SEED:
     torch.random.manual_seed(0)
-NUM_JOBS = 1
+NUM_JOBS = 2
 LOAD_PATH = None
-OPT = "SGD"
 
 args = {
     "Opt": OPT, 
@@ -99,7 +99,7 @@ def run(perc_train):
     """
     Wandb
     """
-    tags = [f"perc_train_{perc_train}", f"label_noise_{LABEL_NOISE}", f"width_{WIDTH_PARAM}", f"weight_decay_{WEIGHT_DECAY}", f"LR_{LR}"]
+    tags = [f"perc_train_{perc_train}", OPT, f"label_noise_{LABEL_NOISE}", f"width_{WIDTH_PARAM}", f"weight_decay_{WEIGHT_DECAY}", f"LR_{LR}"]
     args["Percent Training Data"] = perc_train
     name = '-'.join(tags) + f"-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     wandb.init(project="deep-double-descent", tags=tags, name=name, config=args)
