@@ -25,10 +25,10 @@ parser.add_argument("--dset-size", type=float, required=True)
 arguments = parser.parse_args() 
 
 PERC_TRAIN = arguments.dset_size
-# PERC_TRAIN = [0.01, 0.01, 0.001, 0.001] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
+# PERC_TRAIN = [0.001, 0.005, 0.01, 0.05], # 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
 
 WIDTH_PARAM = 12 # [3, 12, 64] are in DDD
-LR = 0.0001 # per DDD
+LR = 0.01 # 0.0001 per DDD, but fails?
 LABEL_NOISE = .15 # per DDD
 EPOCHS = 4000 # per DDD
 BATCH_SIZE = 128 # per DDD
@@ -139,18 +139,17 @@ def run(perc_train):
                 "Loss/normalized_val": criterion((y_pred / torch.norm(y_pred, dim=1).unsqueeze(1)), y).item()
             })
 
-        torch.save(model.state_dict(), f"weights/{name}-LATEST-model.pt")
+        # torch.save(model.state_dict(), f"weights/{name}-LATEST-model.pt")
 
 if __name__ == '__main__':
-    # torch.multiprocessing.set_start_method('spawn')
-    # wandb.setup()
-    # processes = []
-    # for i in range(NUM_JOBS):
-    #     processes.append(Process(target=run, args=(PERC_TRAIN[i] if isinstance(PERC_TRAIN, list) else PERC_TRAIN,)))
+    torch.multiprocessing.set_start_method('spawn')
+    wandb.setup()
+    processes = []
+    for i in range(NUM_JOBS):
+        processes.append(Process(target=run, args=(PERC_TRAIN[i] if isinstance(PERC_TRAIN, list) else PERC_TRAIN,)))
 
-    # for p in processes:
-    #     p.start()
+    for p in processes:
+        p.start()
 
-    # for p in processes:
-    #     p.join()
-    run(1)
+    for p in processes:
+        p.join()
