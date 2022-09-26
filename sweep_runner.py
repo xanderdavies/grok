@@ -8,7 +8,7 @@ parser = argparse.ArgumentParser(description="Replication of grokking behavior o
 parser.add_argument("--sweep", type=str, help="Sweep id agents to run")
 arguments = parser.parse_args()
 
-NUM_JOBS = 1
+NUM_JOBS = 8
 
 def run():
     os.system(f"wandb agent {arguments.sweep}")
