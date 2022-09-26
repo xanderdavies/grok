@@ -70,8 +70,8 @@ def run(perc_train):
 
     print(f"Train set includes {len(train_set.data)} images")
     BATCH_SIZE_UPDATED = min(len(train_set.data), BATCH_SIZE)
-    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE_UPDATED, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=BATCH_SIZE_UPDATED, shuffle=False)
+    train_loader = DataLoader(train_set, batch_size=BATCH_SIZE_UPDATED, shuffle=True, num_workers=4)
+    test_loader = DataLoader(test_set, batch_size=BATCH_SIZE_UPDATED, shuffle=False, num_workers=4)
 
     """
     Model
