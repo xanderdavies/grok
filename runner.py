@@ -315,7 +315,7 @@ def run(args: argparse.Namespace):
                 print(f"Epoch {epoch}: test loss {loss / len(val_dataloader)}, test accuracy {accuracy / len(val_dataloader)}")
             
         # save model
-        torch.save(model.state_dict(), f"weights/{name}-LATEST-model.pt")
+        # torch.save(model.state_dict(), f"weights/{name}-LATEST-model.pt")
 
 if __name__ == '__main__':
     torch.multiprocessing.set_start_method('spawn')
