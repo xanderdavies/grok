@@ -25,7 +25,7 @@ Hyperparameters
 # arguments = parser.parse_args() 
 
 # PERC_TRAIN = arguments.dset_size
-PERC_TRAIN = [0.001, 0.005, 0.01, 0.05] # 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
+PERC_TRAIN = [0.1, 0.25, 0.5, 1] #0.001, 0.005, 0.01, 0.05] # 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
 
 WIDTH_PARAM = 12 # [3, 12, 64] are in DDD
 LR = 0.01 # 0.0001 per DDD, but fails?
@@ -39,7 +39,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'; print("using:", DEVICE)
 RANDOM_SEED = True
 if not RANDOM_SEED:
     torch.random.manual_seed(0)
-NUM_JOBS = 4
+NUM_JOBS = 1
 LOAD_PATH = None
 OPT = "SGD"
 
