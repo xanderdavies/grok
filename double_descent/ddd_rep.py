@@ -30,7 +30,7 @@ PERC_TRAIN = [0.1, 1]
 
 WIDTH_PARAM = 64 # [3, 12, 64] are in DDD
 LR =  0.0001 # 0.01 # per DDD, but fails?
-LABEL_NOISE = .15 # per DDD
+LABEL_NOISE = 2 # per DDD
 EPOCHS = 4000 # per DDD
 BATCH_SIZE = 128 # per DDD
 
@@ -110,20 +110,6 @@ def run(perc_train):
     Train
     """
     for ep in tqdm(range(EPOCHS)):
-        model.train()
-        for x, y in train_loader:
-            x, y = x.to(DEVICE), y.to(DEVICE)
-            optimizer.zero_grad()
-            y_pred = model(x)
-            loss = criterion(y_pred, y)
-            loss.backward()
-            optimizer.step()
-            wandb.log({
-                "Loss/train": loss.item(),
-                "Accuracy/train": (y_pred.argmax(dim=1) == y).float().mean().item(),
-                "epoch": ep,
-                "Loss/normalized_train": criterion((y_pred / torch.norm(y_pred, dim=1).unsqueeze(1)), y).item()
-            })
         model.eval()
         with torch.no_grad():
             total_loss, total_acc = 0, 0
@@ -138,6 +124,20 @@ def run(perc_train):
                 "Accuracy/val": total_acc / len(test_loader),
                 "epoch": ep,
                 "Loss/normalized_val": criterion((y_pred / torch.norm(y_pred, dim=1).unsqueeze(1)), y).item()
+            })
+        model.train()
+        for x, y in train_loader:
+            x, y = x.to(DEVICE), y.to(DEVICE)
+            optimizer.zero_grad()
+            y_pred = model(x)
+            loss = criterion(y_pred, y)
+            loss.backward()
+            optimizer.step()
+            wandb.log({
+                "Loss/train": loss.item(),
+                "Accuracy/train": (y_pred.argmax(dim=1) == y).float().mean().item(),
+                "epoch": ep,
+                "Loss/normalized_train": criterion((y_pred / torch.norm(y_pred, dim=1).unsqueeze(1)), y).item()
             })
 
         # torch.save(model.state_dict(), f"weights/{name}-LATEST-model.pt")
