@@ -25,9 +25,10 @@ Hyperparameters
 # arguments = parser.parse_args() 
 
 # PERC_TRAIN = arguments.dset_size
-PERC_TRAIN = [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
+PERC_TRAIN = [0.1, 1]
+# PERC_TRAIN = [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1] # [1, 0.8, 0.6, 0.4] #.001 # how much of the training data to use (1 = all)
 
-WIDTH_PARAM = 12 # [3, 12, 64] are in DDD
+WIDTH_PARAM = 64 # [3, 12, 64] are in DDD
 LR =  0.0001 # 0.01 # per DDD, but fails?
 LABEL_NOISE = .15 # per DDD
 EPOCHS = 4000 # per DDD
@@ -40,7 +41,7 @@ OPT = "Adam" # per DDD
 RANDOM_SEED = True
 if not RANDOM_SEED:
     torch.random.manual_seed(0)
-NUM_JOBS = 8
+NUM_JOBS = 2
 LOAD_PATH = None
 
 args = {
