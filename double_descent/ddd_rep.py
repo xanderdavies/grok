@@ -41,7 +41,7 @@ OPT = "Adam" # per DDD
 RANDOM_SEED = True
 if not RANDOM_SEED:
     torch.random.manual_seed(0)
-NUM_JOBS = 2
+NUM_JOBS = 1
 LOAD_PATH = None
 
 args = {
