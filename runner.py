@@ -269,7 +269,6 @@ def run(args: argparse.Namespace):
                 })
         if val_acc > .99 and not generalized_99:
             print(f"> .99 gen achieved at train_step {epoch * len(train_dataloader)}")
-            import ipdb; ipdb.set_trace()
             generalized_99 = True
             if LOG:
                 wandb.log({
@@ -299,7 +298,6 @@ def run(args: argparse.Namespace):
                 validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch)
         if total_train_acc/len(train_dataloader) > .99 and not interpolated_99:
             print(f"> .99 interpolation achieved at train_step {(epoch + 1) * len(train_dataloader)}")
-            import ipdb; ipdb.set_trace()
             interpolated_99 = True
             if LOG:
                 wandb.log({
@@ -310,7 +308,6 @@ def run(args: argparse.Namespace):
                 })
         if total_train_acc/len(train_dataloader) == 1 and not interpolated_100:
             print(f"> .99 interpolation achieved at train_step {(epoch + 1) * len(train_dataloader)}")
-            import ipdb; ipdb.set_trace()
             interpolated_100 = True
             if LOG:
                 wandb.log({
