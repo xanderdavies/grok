@@ -95,8 +95,13 @@ def run(args: argparse.Namespace):
         operator="/",
         operand_length=None,
     )
+
     if args.random_data:
-        train_dataset.data[:, -2] = train_dataset.data[np.random.permutation(list(range(len(train_dataset.data)))), -2]
+        # train_dataset.data[:, -2] = train_dataset.data[np.random.permutation(list(range(len(train_dataset.data)))), -2]
+        for i in range(min(train_dataset.data[:, 1]), max(train_dataset.data[:, 1]) + 1):
+            mask = (train_dataset.data[:, 1] == i)
+            train_dataset.data[mask, -2] = torch.tensor(np.random.permutation(train_dataset.data[mask][:, -2])).type_as(train_dataset.data)
+        
 
     train_dataloader = ArithmeticIterator(
         train_dataset,
@@ -108,6 +113,9 @@ def run(args: argparse.Namespace):
         DEVICE,
         batchsize_hint=-1,
     )
+
+    sample = train_dataset.tokenizer.encode("0 / 1 = 0 <|eos|>")
+    zero_enc, one_enc = sample[0].item(), sample[2].item()
 
     full_train_X, full_train_y = None, None
     for data in train_dataloader:
@@ -219,12 +227,14 @@ def run(args: argparse.Namespace):
     # looks like \lambda for l2 reg should be the _same_ as \lambda for weight_decay. This implies  that our weight decay is actually already being divided by the learning rate 
     # in pytorch. I just checked the pytorch code, and this _is_ the case!
     reg_criterion = SpecialCELReg(args.weight_decay, model)
-    criterion = reg_criterion if args.use_regularized_loss else SpecialCEL()
-
+    # criterion = reg_criterion if args.use_regularized_loss else SpecialCEL()
+    cel = nn.CrossEntropyLoss()
+    criterion = lambda y_hat, target, *args, **kwargs: cel(y_hat[:, -2, :], target[:, -2])
     """
     Train
     """
     steps_per_epoch = len(train_dataloader)
+    interpolated_99, interpolated_100, generalized_99, generalized_100, generalized_90 = False, False, False, False, False
     for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
         if epoch == 10000 and args.switch_to_ten:
             del train_dataset, train_dataloader
@@ -245,91 +255,214 @@ def run(args: argparse.Namespace):
                 batchsize_hint=-1,
             )
 
+        # eval
+        val_acc = validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch)
+        if val_acc > .9 and not generalized_90:
+            print(f"> .9 gen achieved at train_step {epoch * len(train_dataloader)}")
+            generalized_90 = True
+            if LOG:
+                wandb.log({
+                    "Time to .9 Test Accuracy (epoch)": epoch, 
+                    "Time to .9 Test Accuracy (train step)":  epoch * len(train_dataloader), 
+                    "train_step":  epoch * len(train_dataloader), 
+                    "epoch": epoch,
+                })
+        if val_acc > .99 and not generalized_99:
+            print(f"> .99 gen achieved at train_step {epoch * len(train_dataloader)}")
+            import ipdb; ipdb.set_trace()
+            generalized_99 = True
+            if LOG:
+                wandb.log({
+                    "Time to .99 Test Accuracy (epoch)": epoch, 
+                    "Time to .99 Test Accuracy (train step)":  epoch * len(train_dataloader), 
+                    "train_step":  epoch * len(train_dataloader), 
+                    "epoch": epoch,
+                })
+        if val_acc == 1 and not generalized_100:
+            print(f"perfect gen achieved at train_step {epoch * len(train_dataloader)}")
+            generalized_100 = True
+            if LOG:
+                wandb.log({
+                    "Time to .99 Test Accuracy (epoch)": epoch, 
+                    "Time to .99 Test Accuracy (train step)":  epoch * len(train_dataloader), 
+                    "train_step":  epoch * len(train_dataloader), 
+                    "epoch": epoch,
+                })
+
         # train
         model.train()
+        total_train_acc = 0
         for i, batch in enumerate(train_dataloader):
-            X, y = batch['text'], batch['target'] # batch['lower_dim_embedding'], batch['target']
-            X, y = X.to(DEVICE), y.to(DEVICE)
-            y_hat = model(X, embedding_noise=args.embedding_noise)
-            loss = criterion(y_hat, y, normalize=args.use_normalized_loss)
-            train_acc = (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            with torch.no_grad():
-                loss_with_reg = reg_criterion(y_hat, y, normalize=args.use_normalized_loss)
-                log_dict = {
+            train_acc = train_step(args, model, i, train_dataloader, optimizer, reg_criterion, criterion, epoch, batch)
+            total_train_acc += train_acc
+            if epoch < 1000:
+                validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch)
+        if total_train_acc/len(train_dataloader) > .99 and not interpolated_99:
+            print(f"> .99 interpolation achieved at train_step {(epoch + 1) * len(train_dataloader)}")
+            import ipdb; ipdb.set_trace()
+            interpolated_99 = True
+            if LOG:
+                wandb.log({
+                    "Time to .99 Train Accuracy (epoch)": epoch + 1, 
+                    "Time to .99 Train Accuracy (train step)":  (epoch + 1) * len(train_dataloader), 
+                    "train_step":  epoch * len(train_dataloader), 
+                    "epoch": epoch,
+                })
+        if total_train_acc/len(train_dataloader) == 1 and not interpolated_100:
+            print(f"> .99 interpolation achieved at train_step {(epoch + 1) * len(train_dataloader)}")
+            import ipdb; ipdb.set_trace()
+            interpolated_100 = True
+            if LOG:
+                wandb.log({
+                    "Time to .99 Train Accuracy (epoch)": epoch + 1, 
+                    "Time to .99 Train Accuracy (train step)":  (epoch + 1) * len(train_dataloader), 
+                    "train_step":  epoch * len(train_dataloader), 
+                    "epoch": epoch,
+                })
+
+def train_step(args, model, i, train_dataloader, optimizer, reg_criterion, criterion, epoch, batch):
+    X, y = batch['text'], batch['target'] # batch['lower_dim_embedding'], batch['target']
+    X, y = X.to(DEVICE), y.to(DEVICE)
+    y_hat = model(X, embedding_noise=args.embedding_noise)
+    loss = criterion(y_hat, y, normalize=args.use_normalized_loss)
+    train_acc = (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+    with torch.no_grad():
+        loss_with_reg = reg_criterion(y_hat, y, normalize=args.use_normalized_loss)
+        log_dict = {
                     "Loss/train": loss.item(),
                     "Loss/train_reg_term_only":  reg_criterion.reg_term.item(), 
                     "Loss/train_with_reg": loss_with_reg.item(),
                     "Accuracy/train": train_acc,
                     "epoch": epoch,
+                    "train_step": epoch * len(train_dataloader) + i
                 }
-                if args.log_normalized_loss:
-                    log_dict["Loss/train_normalized"] = criterion(y_hat, y, normalize=True).item()
-                if LOG:
-                    total_norm, decoder_norms, linear_norm, embedding_norm = 0, 0, 0, 0
-                    for n, p in model.named_parameters():
-                        if p.requires_grad:
-                            norm = p.grad.norm().item()
-                            total_norm += norm
-                            log_dict[f"Gradient_Norms/{n}"] = norm
-                    for n, p in model.named_parameters():
-                        if p.requires_grad:
-                            log_dict[f"Gradients_Norms_Perc_Total/{n}"] = log_dict[f"Gradient_Norms/{n}"]/total_norm
-                            if n.split('.')[0] == "decoder":
-                                decoder_norms += log_dict[f"Gradient_Norms/{n}"]
-                            elif n.split('.')[0] == "linear":
-                                linear_norm += log_dict[f"Gradient_Norms/{n}"]
-                            elif n.split('.')[0] == "embedding":
-                                embedding_norm += log_dict[f"Gradient_Norms/{n}"]
-                            else:
-                                raise Exception("Unexpected Parameter Name")
-                    log_dict[f"Gradient_Norms_Perc_Total/decoder"] = decoder_norms / total_norm 
-                    log_dict[f"Gradient_Norms_Perc_Total/linear"] = linear_norm / total_norm 
-                    log_dict[f"Gradient_Norms_Perc_Total/embedding"] = embedding_norm / total_norm 
-                    wandb.log(log_dict)
-                else:
-                    print(f"Epoch {epoch}: train loss {loss.item()}, train accuracy {train_acc}")
+        if args.log_normalized_loss:
+            log_dict["Loss/train_normalized"] = criterion(y_hat, y, normalize=True).item()
+        if LOG:
+            total_norm, decoder_norms, linear_norm, embedding_norm = 0, 0, 0, 0
+            for n, p in model.named_parameters():
+                if p.requires_grad:
+                    norm = p.grad.norm().item()
+                    total_norm += norm
+                    log_dict[f"Gradient_Norms/{n}"] = norm
+            for n, p in model.named_parameters():
+                if p.requires_grad:
+                    log_dict[f"Gradients_Norms_Perc_Total/{n}"] = log_dict[f"Gradient_Norms/{n}"]/total_norm
+                    if n.split('.')[0] == "decoder":
+                        decoder_norms += log_dict[f"Gradient_Norms/{n}"]
+                    elif n.split('.')[0] == "linear":
+                        linear_norm += log_dict[f"Gradient_Norms/{n}"]
+                    elif n.split('.')[0] == "embedding":
+                        embedding_norm += log_dict[f"Gradient_Norms/{n}"]
+                    else:
+                        raise Exception("Unexpected Parameter Name")
+            log_dict[f"Gradient_Norms_Perc_Total/decoder"] = decoder_norms / total_norm 
+            log_dict[f"Gradient_Norms_Perc_Total/linear"] = linear_norm / total_norm 
+            log_dict[f"Gradient_Norms_Perc_Total/embedding"] = embedding_norm / total_norm 
+            wandb.log(log_dict)
+        else:
+            print(f"Epoch {epoch}: train loss {loss.item()}, train accuracy {train_acc}")
+        return train_acc
 
-        # eval
-        model.eval()
-        with torch.no_grad():
-            loss, accuracy = 0, 0
-            for batch in val_dataloader: # only one batch
-                X, y = batch['text'], batch['target'] # batch['text'], batch['target']
-                X, y = X.to(DEVICE), y.to(DEVICE)
-                y_hat = model(X)
-                loss += criterion(y_hat, y, normalize=args.use_normalized_loss).item()
-                accuracy += (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
-            if LOG:
-                log_dict = {
+def validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch):
+    model.eval()
+    with torch.no_grad():
+        loss, accuracy = 0, 0
+        div_1_loss, div_1_acc = 0, 0
+        zero_start_loss, zero_start_acc = 0, 0
+        not_zero_loss, not_zero_acc = 0, 0
+        either_loss, either_acc = 0, 0
+        a_eq_b_loss, a_eq_b_acc = 0, 0
+        for batch in val_dataloader: # only one batch
+            X, y = batch['text'], batch['target'] # batch['text'], batch['target']
+            X, y = X.to(DEVICE), y.to(DEVICE)
+
+            y_hat = model(X)
+            loss += criterion(y_hat, y, normalize=args.use_normalized_loss).item()
+            accuracy += (y_hat[:, -2, :].argmax(dim=1) == y[:, -2]).float().mean().item()
+
+            zero_start_y = y[y[:, 0] == zero_enc]
+            zero_start_X = X[y[:, 0] == zero_enc]
+            zero_start_y_hat = model(zero_start_X)
+
+            div_1_y = y[y[:, 2] == one_enc]
+            div_1_X = X[y[:, 2] == one_enc]
+            div_1_y_hat = model(div_1_X)
+
+            not_zero_y = y[~(y[:, 0] == zero_enc)]
+            not_zero_X = X[~(y[:, 0] == zero_enc)]
+            not_zero_y_hat = model(not_zero_X)
+
+            a_eq_b_y = y[y[:, 0] == y[:, 2]]
+            a_eq_b_X = X[y[:, 0] == y[:, 2]]
+            a_eq_b_y_hat = model(a_eq_b_X)
+
+            either_mask = ((y[:, 2] == one_enc)*1 + (y[:, 0] == zero_enc)*1) > 0
+            either_y = y[either_mask]
+            either_X = X[either_mask]
+            either_y_hat = model(either_X)
+
+            div_1_loss += criterion(div_1_y_hat, div_1_y).item()
+            div_1_acc += (div_1_y_hat[:, -2, :].argmax(dim=1) == div_1_y[:, -2]).float().mean().item()
+
+            zero_start_loss += criterion(zero_start_y_hat, zero_start_y).item()
+            zero_start_acc += (zero_start_y_hat[:, -2, :].argmax(dim=1) == zero_start_y[:, -2]).float().mean().item()
+
+            not_zero_loss += criterion(not_zero_y_hat, not_zero_y).item()
+            not_zero_acc += (not_zero_y_hat[:, -2, :].argmax(dim=1) == not_zero_y[:, -2]).float().mean().item()
+
+            either_loss += criterion(either_y_hat, either_y).item()
+            either_acc += (either_y_hat[:, -2, :].argmax(dim=1) == either_y[:, -2]).float().mean().item()
+
+            a_eq_b_loss += criterion(a_eq_b_y_hat, a_eq_b_y).item()
+            a_eq_b_acc += (a_eq_b_y_hat[:, -2, :].argmax(dim=1) == a_eq_b_y[:, -2]).float().mean().item()
+
+
+        if LOG:
+            log_dict = {
                     "Loss/val": loss / len(val_dataloader),
+                    "Loss/val_div_1": div_1_loss / len(val_dataloader),
+                    "Loss/val_0_div": zero_start_loss / len(val_dataloader),
+                    "Loss/val_not_0": not_zero_loss / len(val_dataloader),
+                    "Loss/val_either_0_1": either_loss / len(val_dataloader),
+                    "Loss/val_a_eq_b": a_eq_b_loss / len(val_dataloader),
                     "Accuracy/val": accuracy / len(val_dataloader),
+                    "Accuracy/val_div_1": div_1_acc / len(val_dataloader),
+                    "Accuracy/val_0_div": zero_start_acc / len(val_dataloader),
+                    "Accuracy/val_a_eq_b": a_eq_b_acc / len(val_dataloader),
+                    "Accuracy/val_not_zero": not_zero_acc / len(val_dataloader),
+                    "Accuracy/val_either_0_1": either_acc / len(val_dataloader),
+                    "Percent Zero Prediction": (y_hat[:, -2, :].argmax(dim=1) == zero_enc).sum()/len(y_hat[:, -2, :]),
                     "epoch": epoch,
+                    "train_step": epoch * len(train_dataloader)
                 }
-                if args.log_normalized_loss:
-                    log_dict["Loss/val_normalized"] = criterion(y_hat, y, normalize=True).item()
-                wandb.log(log_dict)
-            else:
-                print(f"Epoch {epoch}: test loss {loss / len(val_dataloader)}, test accuracy {accuracy / len(val_dataloader)}")
-            
+            if args.log_normalized_loss:
+                log_dict["Loss/val_normalized"] = criterion(y_hat, y, normalize=True).item()
+            wandb.log(log_dict)
+        else:
+            print(f"Epoch {epoch}: test loss {loss / len(val_dataloader)}, test accuracy {accuracy / len(val_dataloader)}")
+        
+        return accuracy / len(val_dataloader)
         # save model
         # torch.save(model.state_dict(), f"weights/{name}-LATEST-model.pt")
 
 if __name__ == '__main__':
-    torch.multiprocessing.set_start_method('spawn')
-    wandb.setup(settings=wandb.Settings(start_method="thread"))
+    # torch.multiprocessing.set_start_method('spawn')
+    # wandb.setup(settings=wandb.Settings(start_method="thread"))
 
-    processes = []
-    for i in range(arguments.num_jobs):
-        argument_copy = argparse.Namespace(**vars(arguments))
-        processes.append(Process(target=run, args=(argument_copy,)))
+    # processes = []
+    # for i in range(arguments.num_jobs):
+    #     argument_copy = argparse.Namespace(**vars(arguments))
+    #     processes.append(Process(target=run, args=(argument_copy,)))
 
-    for p in processes:
-        print("starting process...")
-        p.start()
-        time.sleep(1)
+    # for p in processes:
+    #     print("starting process...")
+    #     p.start()
+    #     time.sleep(1)
 
-    for p in processes:
-        p.join()
+    # for p in processes:
+    #     p.join()
+    run(arguments)
