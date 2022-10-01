@@ -282,8 +282,8 @@ def run(args: argparse.Namespace):
             generalized_100 = True
             if LOG:
                 wandb.log({
-                    "Time to .99 Test Accuracy (epoch)": epoch, 
-                    "Time to .99 Test Accuracy (train step)":  epoch * len(train_dataloader), 
+                    "Time to 1 Test Accuracy (epoch)": epoch, 
+                    "Time to 1 Test Accuracy (train step)":  epoch * len(train_dataloader), 
                     "train_step":  epoch * len(train_dataloader), 
                     "epoch": epoch,
                 })
@@ -311,8 +311,8 @@ def run(args: argparse.Namespace):
             interpolated_100 = True
             if LOG:
                 wandb.log({
-                    "Time to .99 Train Accuracy (epoch)": epoch + 1, 
-                    "Time to .99 Train Accuracy (train step)":  (epoch + 1) * len(train_dataloader), 
+                    "Time to 1 Train Accuracy (epoch)": epoch + 1, 
+                    "Time to 1 Train Accuracy (train step)":  (epoch + 1) * len(train_dataloader), 
                     "train_step":  epoch * len(train_dataloader), 
                     "epoch": epoch,
                 })
