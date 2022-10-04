@@ -235,6 +235,7 @@ def run(args: argparse.Namespace):
     """
     steps_per_epoch = len(train_dataloader)
     interpolated_99, interpolated_100, generalized_99, generalized_100, generalized_90 = False, False, False, False, False
+    train_step_counter = 0
     for epoch in tqdm(range(int(OPTIMIZATION_BUDGET / steps_per_epoch))):
         if epoch == 10000 and args.switch_to_ten:
             del train_dataset, train_dataloader
@@ -258,63 +259,72 @@ def run(args: argparse.Namespace):
         # eval
         val_acc = validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch)
         if val_acc > .9 and not generalized_90:
-            print(f"> .9 gen achieved at train_step {epoch * len(train_dataloader)}")
+            print(f"> .9 gen achieved at train_step {train_step_counter}")
             generalized_90 = True
             if LOG:
                 wandb.log({
                     "Time to .9 Test Accuracy (epoch)": epoch, 
-                    "Time to .9 Test Accuracy (train step)":  epoch * len(train_dataloader), 
-                    "train_step":  epoch * len(train_dataloader), 
+                    "Time to .9 Test Accuracy (train step)":  train_step_counter, 
+                    "train_step":  train_step_counter, 
                     "epoch": epoch,
                 })
         if val_acc > .99 and not generalized_99:
-            print(f"> .99 gen achieved at train_step {epoch * len(train_dataloader)}")
+            print(f"> .99 gen achieved at train_step {train_step_counter}")
             generalized_99 = True
             if LOG:
                 wandb.log({
                     "Time to .99 Test Accuracy (epoch)": epoch, 
-                    "Time to .99 Test Accuracy (train step)":  epoch * len(train_dataloader), 
-                    "train_step":  epoch * len(train_dataloader), 
+                    "Time to .99 Test Accuracy (train step)":  train_step_counter, 
+                    "train_step":  train_step_counter, 
                     "epoch": epoch,
                 })
         if val_acc == 1 and not generalized_100:
-            print(f"perfect gen achieved at train_step {epoch * len(train_dataloader)}")
+            print(f"perfect gen achieved at train_step {train_step_counter}")
             generalized_100 = True
             if LOG:
                 wandb.log({
                     "Time to 1 Test Accuracy (epoch)": epoch, 
-                    "Time to 1 Test Accuracy (train step)":  epoch * len(train_dataloader), 
-                    "train_step":  epoch * len(train_dataloader), 
+                    "Time to 1 Test Accuracy (train step)":  train_step_counter, 
+                    "train_step":  train_step_counter, 
                     "epoch": epoch,
                 })
 
         # train
         model.train()
-        total_train_acc = 0
+        total_train_acc, total_train_loss = 0, 0
         for i, batch in enumerate(train_dataloader):
-            train_acc = train_step(args, model, i, train_dataloader, optimizer, reg_criterion, criterion, epoch, batch)
+            train_step_counter += 1
+            train_acc, train_loss = train_step(args, model, i, train_dataloader, optimizer, reg_criterion, criterion, epoch, batch)
             total_train_acc += train_acc
+            total_train_loss += train_loss
             if epoch < 1000:
                 validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch)
+        if LOG:
+            wandb.log({
+                    "Accuracy/train": total_train_acc/len(train_dataloader), 
+                    "Loss/train":  total_train_loss/len(train_dataloader), 
+                    "train_step":  train_step_counter, 
+                    "epoch": epoch + 1,
+                })
         if total_train_acc/len(train_dataloader) > .99 and not interpolated_99:
             print(f"> .99 interpolation achieved at train_step {(epoch + 1) * len(train_dataloader)}")
             interpolated_99 = True
             if LOG:
                 wandb.log({
                     "Time to .99 Train Accuracy (epoch)": epoch + 1, 
-                    "Time to .99 Train Accuracy (train step)":  (epoch + 1) * len(train_dataloader), 
-                    "train_step":  epoch * len(train_dataloader), 
-                    "epoch": epoch,
+                    "Time to .99 Train Accuracy (train step)":  train_step_counter, 
+                    "train_step":  train_step_counter, 
+                    "epoch": epoch + 1,
                 })
         if total_train_acc/len(train_dataloader) == 1 and not interpolated_100:
-            print(f"> .99 interpolation achieved at train_step {(epoch + 1) * len(train_dataloader)}")
+            print(f"> .99 interpolation achieved at train_step {train_step_counter}")
             interpolated_100 = True
             if LOG:
                 wandb.log({
                     "Time to 1 Train Accuracy (epoch)": epoch + 1, 
-                    "Time to 1 Train Accuracy (train step)":  (epoch + 1) * len(train_dataloader), 
-                    "train_step":  epoch * len(train_dataloader), 
-                    "epoch": epoch,
+                    "Time to 1 Train Accuracy (train step)":  train_step_counter, 
+                    "train_step":  train_step_counter, 
+                    "epoch": epoch + 1,
                 })
 
 def train_step(args, model, i, train_dataloader, optimizer, reg_criterion, criterion, epoch, batch):
@@ -338,31 +348,31 @@ def train_step(args, model, i, train_dataloader, optimizer, reg_criterion, crite
                 }
         if args.log_normalized_loss:
             log_dict["Loss/train_normalized"] = criterion(y_hat, y, normalize=True).item()
-        if LOG:
-            total_norm, decoder_norms, linear_norm, embedding_norm = 0, 0, 0, 0
-            for n, p in model.named_parameters():
-                if p.requires_grad:
-                    norm = p.grad.norm().item()
-                    total_norm += norm
-                    log_dict[f"Gradient_Norms/{n}"] = norm
-            for n, p in model.named_parameters():
-                if p.requires_grad:
-                    log_dict[f"Gradients_Norms_Perc_Total/{n}"] = log_dict[f"Gradient_Norms/{n}"]/total_norm
-                    if n.split('.')[0] == "decoder":
-                        decoder_norms += log_dict[f"Gradient_Norms/{n}"]
-                    elif n.split('.')[0] == "linear":
-                        linear_norm += log_dict[f"Gradient_Norms/{n}"]
-                    elif n.split('.')[0] == "embedding":
-                        embedding_norm += log_dict[f"Gradient_Norms/{n}"]
-                    else:
-                        raise Exception("Unexpected Parameter Name")
-            log_dict[f"Gradient_Norms_Perc_Total/decoder"] = decoder_norms / total_norm 
-            log_dict[f"Gradient_Norms_Perc_Total/linear"] = linear_norm / total_norm 
-            log_dict[f"Gradient_Norms_Perc_Total/embedding"] = embedding_norm / total_norm 
+        if LOG and epoch < 1000:
+            # total_norm, decoder_norms, linear_norm, embedding_norm = 0, 0, 0, 0
+            # for n, p in model.named_parameters():
+            #     if p.requires_grad:
+            #         norm = p.grad.norm().item()
+            #         total_norm += norm
+            #         log_dict[f"Gradient_Norms/{n}"] = norm
+            # for n, p in model.named_parameters():
+            #     if p.requires_grad:
+            #         log_dict[f"Gradients_Norms_Perc_Total/{n}"] = log_dict[f"Gradient_Norms/{n}"]/total_norm
+            #         if n.split('.')[0] == "decoder":
+            #             decoder_norms += log_dict[f"Gradient_Norms/{n}"]
+            #         elif n.split('.')[0] == "linear":
+            #             linear_norm += log_dict[f"Gradient_Norms/{n}"]
+            #         elif n.split('.')[0] == "embedding":
+            #             embedding_norm += log_dict[f"Gradient_Norms/{n}"]
+            #         else:
+            #             raise Exception("Unexpected Parameter Name")
+            # log_dict[f"Gradient_Norms_Perc_Total/decoder"] = decoder_norms / total_norm 
+            # log_dict[f"Gradient_Norms_Perc_Total/linear"] = linear_norm / total_norm 
+            # log_dict[f"Gradient_Norms_Perc_Total/embedding"] = embedding_norm / total_norm 
             wandb.log(log_dict)
         else:
             print(f"Epoch {epoch}: train loss {loss.item()}, train accuracy {train_acc}")
-        return train_acc
+        return train_acc, loss.item()
 
 def validate(args, model, train_dataloader, val_dataloader, zero_enc, one_enc, criterion, epoch):
     model.eval()
