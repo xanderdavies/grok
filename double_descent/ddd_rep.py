@@ -17,7 +17,7 @@ from utils import remove_train, apply_label_noise
 """
 Hyperparameters
 """
-
+LOG = True
 PERC_TRAIN = 1
 WIDTH_PARAM = 64 # [3, 12, 64] are in DDD
 LR =  0.0001 # per DDD
@@ -76,7 +76,9 @@ def run(args):
     tags = [f"perc_train_{perc_train}", OPT, f"label_noise_{LABEL_NOISE}", f"width_{WIDTH_PARAM}", f"weight_decay_{WEIGHT_DECAY}", f"LR_{LR}", f"SLOW_EARLY_LR_{SLOW_EARLY_LR}"]
     args["Percent Training Data"] = perc_train
     name = '-'.join(tags) + f"-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    wandb.init(project="deep-double-descent", tags=tags, name=name, config=args)
+    
+    mode = None if args["Log"] else "disabled"
+    wandb.init(project="deep-double-descent", tags=tags, name=name, config=args, mode=mode)
     wandb.watch(model)
 
     """
@@ -131,6 +133,7 @@ if __name__ == '__main__':
     "Percent Training Data": PERC_TRAIN, 
     "Learning Rate": LR, 
     "Resnet-18 Width Parameter": WIDTH_PARAM,
-    "Random Seed": RANDOM_SEED
+    "Random Seed": RANDOM_SEED,
+    "Log": LOG,
     }
     run(args)
