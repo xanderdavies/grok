@@ -73,7 +73,7 @@ def run(args):
     """
     Wandb
     """
-    tags = [f"perc_train_{perc_train}", OPT, f"label_noise_{LABEL_NOISE}", f"width_{WIDTH_PARAM}", f"weight_decay_{WEIGHT_DECAY}", f"LR_{LR}", f"SLOW_EARLY_LR_{SLOW_EARLY_LR}"]
+    tags = [f"perc_train_{perc_train}", OPT, f"label_noise_{LABEL_NOISE}", f"width_{WIDTH_PARAM}", f"weight_decay_{WEIGHT_DECAY}", f"LR_{LR}"]
     args["Percent Training Data"] = perc_train
     name = '-'.join(tags) + f"-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
     
