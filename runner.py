@@ -12,10 +12,8 @@ import numpy as np
 
 from dataset import ArithmeticDataset, ArithmeticIterator
 from adamw import AdamW
-from open_ai_transformer import Transformer
+from transformer import Transformer
 from utils import add_tags
-
-# torch.random.manual_seed(0)
 
 """
 Argument Parsing
@@ -41,9 +39,7 @@ parser.add_argument("--beta2", default=0.98, type=float, help="AdamW beta2")
 parser.add_argument("--use-sgd", default=False, action="store_true")
 parser.add_argument("--full-batch", default=False, action="store_true")
 parser.add_argument("--momentum", type=float, default=0)
-parser.add_argument(
-    "--log-normalized-loss", default=True, action="store_true"
-)  # TODO: fix this
+parser.add_argument("--log-normalized-loss", default=True, action="store_true")
 
 # data hyperparameters
 parser.add_argument(
