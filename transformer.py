@@ -1,4 +1,4 @@
-# cleaned up from [OpenAI's implementation](https://github.com/openai/grok/blob/main/grok/transformer.py)
+# mostly copied from [OpenAI's implementation](https://github.com/openai/grok/blob/main/grok/transformer.py)
 
 from typing import Tuple, List, Union
 import torch

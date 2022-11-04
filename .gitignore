@@ -1,12 +1,11 @@
-.vscode/
 scratch.py
 __pycache__
-model.pt
 wandb
-slurm-*
-machine.file.*
+weights
+.vscode/
+data
 *.sh
 *.pt
-weights
 *.png
-data
+slurm-*
+machine.file.*
